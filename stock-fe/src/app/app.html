@@ -5,7 +5,7 @@
       <span>GOAT Boardgames</span>
     </a>
 
-    <div class="side-label">WORKSPACE</div>
+    <div class="side-label">Functions</div>
     <button class="nav-item active" type="button">
       <span class="nav-icon">▦</span>
       <span>Orders</span>
@@ -15,23 +15,13 @@
       <span class="nav-icon">♙</span>
       <span>Customers</span>
     </button>
-
-    <div class="sidebar-bottom">
-      <div class="avatar">OD</div>
-      <div class="profile-copy">
-        <strong>Order desk</strong>
-        <span>Shared workspace</span>
-      </div>
-      <span class="more">···</span>
-    </div>
   </aside>
 
   <main class="main-content">
     <header class="topbar">
-      <div class="breadcrumbs"><span>Workspace</span><span class="crumb-divider">/</span><strong>Orders</strong></div>
+      <div class="breadcrumbs"><strong>Orders</strong></div>
       <div class="topbar-right">
         <span class="today">{{ today | date:'EEEE, MMM d' }}</span>
-        <button class="avatar small-avatar" type="button" aria-label="Shared workspace">GB</button>
       </div>
     </header>
 
@@ -40,7 +30,7 @@
         <div>
           <div class="eyebrow">OVERVIEW</div>
           <h1>Orders</h1>
-          <p class="subtitle">Keep every customer order moving.</p>
+          <p class="subtitle">Get an idea of our orders at a glance</p>
         </div>
         <div class="heading-actions">
           <button class="button button-secondary" type="button" (click)="openCustomers()">Manage customers</button>
@@ -182,6 +172,36 @@
   </main>
 </div>
 
+@if (pendingDeletion; as deletion) {
+  <div class="toast toast-error delete-confirm-toast" role="alertdialog" aria-label="Confirm deletion">
+    <div class="delete-confirm-copy">
+      @if (deletion.kind === 'order') {
+        <strong>Delete order #{{ deletion.order.id }}?</strong>
+        <span>This cannot be undone.</span>
+      } @else if (ordersBlockingCustomerDelete.length > 0) {
+        <strong>This customer can’t be deleted yet.</strong>
+        <span>Complete these orders first:</span>
+        <ul>
+          @for (order of ordersBlockingCustomerDelete; track order.id) {
+            <li>Order #{{ order.id }} — {{ order.status }}</li>
+          }
+        </ul>
+      } @else {
+        <strong>Delete {{ deletion.customer.name }}?</strong>
+        <span>Their completed orders will be kept with the customer name saved, but contact details will be removed.</span>
+      }
+    </div>
+    <div class="toast-actions">
+      <button class="toast-action toast-cancel" type="button" [disabled]="deletingRecord" (click)="cancelDeletion()">Cancel</button>
+      @if (deletion.kind === 'order' || ordersBlockingCustomerDelete.length === 0) {
+        <button class="toast-action toast-delete" type="button" [disabled]="deletingRecord" (click)="confirmDeletion()">
+          {{ deletingRecord ? 'Deleting...' : 'Delete' }}
+        </button>
+      }
+    </div>
+  </div>
+}
+
 @if (orderDialogOpen) {
   <div class="modal-backdrop" (click)="closeOrderDialog()">
     <section class="modal" role="dialog" aria-modal="true" aria-labelledby="order-dialog-title" (click)="$event.stopPropagation()">
@@ -243,11 +263,20 @@
   </div>
 }
 
+@if (orderSaveToast) {
+  <div class="toast-overlay">
+    <section class="toast toast-error" role="alertdialog" aria-modal="true" aria-label="Order save failed">
+      <span>{{ orderSaveToast }}</span>
+      <button type="button" (click)="dismissOrderSaveToast()">Dismiss to edit order</button>
+    </section>
+  </div>
+}
+
 @if (customerDialogOpen) {
   <div class="modal-backdrop" (click)="closeCustomerDialog()">
     <section class="modal customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title" (click)="$event.stopPropagation()">
       <header class="modal-header">
-        <div><div class="eyebrow">YOUR CONTACTS</div><h2 id="customer-dialog-title">Customers</h2></div>
+        <div><div class="eyebrow">Details for our customers</div><h2 id="customer-dialog-title">Customers</h2></div>
         <button class="close-button" type="button" aria-label="Close" (click)="closeCustomerDialog()">×</button>
       </header>
       <div class="modal-body customer-manager">
@@ -282,44 +311,6 @@
           }
         </div>
       </div>
-    </section>
-  </div>
-}
-
-@if (customerDeleteDialogOpen && customerPendingDelete) {
-  <div class="modal-backdrop delete-confirm-backdrop" (click)="closeCustomerDeleteDialog()">
-    <section class="modal delete-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="customer-delete-title" (click)="$event.stopPropagation()">
-      <header class="modal-header">
-        <div><div class="eyebrow">CUSTOMER REMOVAL</div><h2 id="customer-delete-title">Delete {{ customerPendingDelete.name }}?</h2></div>
-        <button class="close-button" type="button" aria-label="Close" [disabled]="deletingCustomer" (click)="closeCustomerDeleteDialog()">×</button>
-      </header>
-      <div class="modal-body delete-confirm-body">
-        @if (errorMessage) { <div class="notice notice-error" role="alert">{{ errorMessage }}</div> }
-        @if (ordersBlockingCustomerDelete.length > 0) {
-          <div class="delete-blocked-message" role="status">
-            <strong>This customer can’t be deleted yet.</strong>
-            <span>Complete or remove these orders first:</span>
-          </div>
-          <ul class="blocking-order-list">
-            @for (order of ordersBlockingCustomerDelete; track order.id) {
-              <li>
-                <div class="blocking-order-main">
-                  <strong>Order #{{ order.id }}</strong>
-                  <span class="status-select" [class]="statusClass(order.status)">{{ order.status }}</span>
-                </div>
-                <div class="blocking-order-detail">{{ order.items.length }} {{ order.items.length === 1 ? 'item' : 'items' }} · {{ itemSummary(order) }}</div>
-                <div class="blocking-order-total">{{ order.total | currency:'ZAR':'symbol':'1.2-2':'en-ZA' }}</div>
-              </li>
-            }
-          </ul>
-        } @else {
-          <p>Are you sure you want to delete this customer? Their completed orders will be kept with the customer name saved, but contact details will be removed.</p>
-        }
-      </div>
-      <footer class="modal-footer">
-        <button class="button button-secondary" type="button" [disabled]="deletingCustomer" (click)="closeCustomerDeleteDialog()">Cancel</button>
-        <button class="button button-danger" type="button" [disabled]="deletingCustomer || ordersBlockingCustomerDelete.length > 0" (click)="confirmDeleteCustomer()">{{ deletingCustomer ? 'Deleting...' : 'Delete customer' }}</button>
-      </footer>
     </section>
   </div>
 }

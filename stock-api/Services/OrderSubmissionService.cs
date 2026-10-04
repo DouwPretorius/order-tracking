@@ -19,7 +19,10 @@ public sealed class OrderSubmissionService(
 
     /// <summary>Validates and creates an order, rejecting an identical recent submission.</summary>
     /// <param name="request">The customer, initial status, and line items supplied for the new order.</param>
-    /// <returns>An HTTP result containing the created order or an appropriate validation/conflict response.</returns>
+    /// <returns>An HTTP result containing the created order or a validation response.</returns>
+    /// <exception cref="DuplicateOrderSubmissionException">
+    /// Thrown when an identical order was submitted inside the configured duplicate window.
+    /// </exception>
     public async Task<IResult> CreateOrderAsync(OrderRequest request)
     {
         var validationError = await ValidateOrderAsync(request);
@@ -50,8 +53,7 @@ public sealed class OrderSubmissionService(
                     DateTimeOffset.UtcNow,
                     duplicateWindowSeconds))
             {
-                return Results.Conflict(new ApiErrorResponse(
-                    $"An identical order was just submitted as order #{duplicate.Id}. No new order was created."));
+                throw new DuplicateOrderSubmissionException(duplicate.Id);
             }
         }
 

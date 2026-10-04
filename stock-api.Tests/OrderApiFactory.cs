@@ -31,7 +31,7 @@ public sealed class OrderApiFactory : WebApplicationFactory<Program>
         previousConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__OrdersDatabase");
         previousDuplicateWindow = Environment.GetEnvironmentVariable("OrderSubmission__DuplicateWindowSeconds");
         Environment.SetEnvironmentVariable("ConnectionStrings__OrdersDatabase", connectionString);
-        Environment.SetEnvironmentVariable("OrderSubmission__DuplicateWindowSeconds", "0");
+        Environment.SetEnvironmentVariable("OrderSubmission__DuplicateWindowSeconds", "120");
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

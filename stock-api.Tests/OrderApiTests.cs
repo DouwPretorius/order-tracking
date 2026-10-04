@@ -109,6 +109,14 @@ public sealed class OrderApiTests(OrderApiFactory factory) : IClassFixture<Order
         Assert.Equal(69.98m, created.Total);
         Assert.Equal(69.98m, Assert.Single(created.Items).LineTotal);
 
+        var duplicateResponse = await client.PostAsJsonAsync("/api/orders", OrderRequest(
+            customerId, "Pending", "Catan: Seafarers", 2, 34.99m));
+        Assert.Equal(HttpStatusCode.Conflict, duplicateResponse.StatusCode);
+        var duplicateError = await duplicateResponse.Content.ReadFromJsonAsync<ApiErrorResponse>(JsonOptions);
+        Assert.NotNull(duplicateError);
+        Assert.Contains($"order #{created.Id}", duplicateError.Message);
+        Assert.Contains("No new order was created.", duplicateError.Message);
+
         var getResponse = await client.GetFromJsonAsync<OrderResponse>($"/api/orders/{created.Id}", JsonOptions);
         Assert.NotNull(getResponse);
         Assert.Equal("Catan: Seafarers", Assert.Single(getResponse.Items).Name);

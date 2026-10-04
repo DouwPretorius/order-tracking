@@ -468,3 +468,4 @@ C:\Projects\stock-tracker\stock-api.Tests\obj\Debug\net10.0\refint\stock-api.Tes
 C:\Projects\stock-tracker\stock-api.Tests\obj\Debug\net10.0\stock-api.Tests.pdb
 C:\Projects\stock-tracker\stock-api.Tests\obj\Debug\net10.0\stock-api.Tests.genruntimeconfig.cache
 C:\Projects\stock-tracker\stock-api.Tests\obj\Debug\net10.0\ref\stock-api.Tests.dll
+C:\Projects\stock-tracker\stock-api.Tests\obj\Debug\net10.0\stock-api.Tests.sourcelink.json

@@ -2,11 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using stock_api.Data;
 using stock_api.Endpoints;
+using stock_api.Infrastructure;
 using stock_api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 builder.Services.AddOptions<OrderSubmissionOptions>()
     .Bind(builder.Configuration.GetSection(OrderSubmissionOptions.SectionName))
@@ -39,6 +42,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowAngularApp");
+app.UseExceptionHandler();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

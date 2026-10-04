@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { App } from './app';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { OrderService } from './order.service';
+import { Customer, Order } from './order.models';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -34,6 +35,7 @@ describe('App', () => {
             }],
             total: 69.98,
           }]),
+          createOrder: () => of({}),
           updateCustomer: () => throwError(() => ({
             status: 409,
             error: { message: 'A customer with this email address already exists.' },
@@ -101,6 +103,7 @@ describe('App', () => {
   it('should reject fractional item quantities before submitting', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
+    fixture.detectChanges();
     const app = fixture.componentInstance;
     app.orderDraft = {
       customerId: 1,
@@ -111,6 +114,114 @@ describe('App', () => {
     await app.saveOrder();
 
     expect(app.errorMessage).toContain('positive whole number');
+  });
+
+  it('should clear order validation messages when the order dialog closes', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    app.openNewOrder();
+    app.errorMessage = 'Each non-empty SKU can only appear once in an order.';
+    fixture.detectChanges();
+
+    expect(app.errorMessage).toContain('SKU');
+
+    app.closeOrderDialog();
+    fixture.detectChanges();
+
+    expect(app.errorMessage).toBe('');
+    expect(fixture.nativeElement.querySelector('.page-content [role="alert"]')).toBeNull();
+  });
+
+  it('should close the order dialog as soon as the save succeeds without waiting for refresh', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const app = fixture.componentInstance;
+    const orderService = TestBed.inject(OrderService);
+    const customersRefresh = new Subject<Customer[]>();
+    const ordersRefresh = new Subject<Order[]>();
+    orderService.getCustomers = () => customersRefresh.asObservable();
+    orderService.getOrders = () => ordersRefresh.asObservable();
+
+    app.openNewOrder();
+    app.orderDraft = {
+      customerId: 1,
+      status: 'Pending',
+      items: [{ name: 'Test item', sku: '', quantity: 1, unitPrice: 10 }],
+    };
+    fixture.detectChanges();
+
+    await app.saveOrder();
+    fixture.detectChanges();
+
+    expect(app.orderDialogOpen).toBe(false);
+    expect(app.savingOrder).toBe(false);
+    expect(fixture.nativeElement.querySelector('.modal')).toBeNull();
+
+    customersRefresh.next([]);
+    customersRefresh.complete();
+    ordersRefresh.next([]);
+    ordersRefresh.complete();
+    await fixture.whenStable();
+  });
+
+  it('should show a duplicate-order toast and allow editing and retrying the order', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    const orderService = TestBed.inject(OrderService);
+    orderService.createOrder = () => throwError(() => ({
+      status: 409,
+      error: { message: 'An identical order was just submitted as order #17. No new order was created.' },
+    }));
+
+    const newOrderButton = [...fixture.nativeElement.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('New order')) as HTMLButtonElement;
+    newOrderButton.click();
+    app.orderDraft = {
+      customerId: 1,
+      status: 'Pending',
+      items: [{ name: 'Test item', sku: '', quantity: 1, unitPrice: 10 }],
+    };
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(app.orderSaveToast).toContain('An identical order was just submitted as order #17.');
+    const toast = fixture.nativeElement.querySelector('.toast-overlay [role="alertdialog"]') as HTMLElement;
+    expect(toast.textContent).toContain('An identical order was just submitted as order #17.');
+    expect(toast.textContent).toContain('Please review or edit the order and try again.');
+    expect(toast.closest('.modal')).toBeNull();
+    expect(app.orderDialogOpen).toBe(true);
+    expect(app.savingOrder).toBe(false);
+    expect(fixture.nativeElement.querySelector('.modal')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.toast-overlay')).not.toBeNull();
+
+    (toast.querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(app.orderSaveToast).toBe('');
+    expect(fixture.nativeElement.querySelector('.toast-overlay')).toBeNull();
+
+    app.orderDraft.items[0].name = 'Edited test item';
+    orderService.createOrder = () => of({
+      id: 18,
+      customerId: 1,
+      customerName: 'John Doe',
+      status: 'Pending',
+      createdAt: '2026-10-04T00:00:00Z',
+      updatedAt: '2026-10-04T00:00:00Z',
+      items: [],
+      total: 10,
+    });
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(app.orderDialogOpen).toBe(false);
+    expect(app.orderSaveToast).toBe('');
   });
 
   it('should offer only valid next statuses and keep terminal statuses locked', () => {
@@ -124,7 +235,7 @@ describe('App', () => {
     expect(app.availableStatusOptions('Cancelled')).toEqual(['Cancelled']);
   });
 
-  it('should show blocking orders and disable customer deletion', async () => {
+  it('should show blocking orders in the delete toast and prevent customer deletion', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const app = fixture.componentInstance;
@@ -141,18 +252,78 @@ describe('App', () => {
       items: [],
       total: 0,
     });
-    app.customerDialogOpen = true;
-
     await app.deleteCustomer(customer);
     fixture.detectChanges();
 
-    const dialog = fixture.nativeElement.querySelector('[role="alertdialog"]') as HTMLElement;
-    const deleteButton = [...dialog.querySelectorAll('button')]
-      .find((button) => button.textContent?.includes('Delete customer'));
+    const dialog = fixture.nativeElement.querySelector('.delete-confirm-toast[role="alertdialog"]') as HTMLElement;
     expect(app.ordersBlockingCustomerDelete.map((order) => order.id)).toEqual([17]);
     expect(dialog.textContent).toContain('Order #17');
     expect(dialog.textContent).not.toContain('Order #18');
-    expect(deleteButton?.disabled).toBe(true);
+    expect(dialog.querySelector('.toast-delete')).toBeNull();
+    expect(dialog.querySelector('.toast-cancel')).not.toBeNull();
+  });
+
+  it('should confirm order deletion from the toast and dismiss it on cancel', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    const orderService = TestBed.inject(OrderService);
+    const deleteOrder = vi.fn(() => of(void 0));
+    orderService.deleteOrder = deleteOrder;
+    const order = app.orders[0];
+    const actionsButton = fixture.nativeElement.querySelector(
+      `[aria-label="More actions for order ${order.id}"]`,
+    ) as HTMLButtonElement;
+    actionsButton.click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.row-actions.open .delete-action') as HTMLButtonElement).click();
+
+    fixture.detectChanges();
+    const confirmation = fixture.nativeElement.querySelector('.delete-confirm-toast') as HTMLElement;
+    expect(confirmation.textContent).toContain(`Delete order #${order.id}?`);
+    expect(deleteOrder).not.toHaveBeenCalled();
+
+    (confirmation.querySelector('.toast-cancel') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(app.pendingDeletion).toBeNull();
+    expect(deleteOrder).not.toHaveBeenCalled();
+
+    actionsButton.click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.row-actions.open .delete-action') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.toast-delete') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(deleteOrder).toHaveBeenCalledWith(order.id);
+    expect(app.pendingDeletion).toBeNull();
+  });
+
+  it('should confirm customer deletion from the toast when no incomplete orders block it', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    await app.loadData();
+    app.orders[0].status = 'Completed';
+    const orderService = TestBed.inject(OrderService);
+    const deleteCustomer = vi.fn(() => of(void 0));
+    orderService.deleteCustomer = deleteCustomer;
+
+    app.openCustomers();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.customer-row .delete-action') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const confirmation = fixture.nativeElement.querySelector('.delete-confirm-toast') as HTMLElement;
+    expect(confirmation.textContent).toContain('Delete John Doe?');
+    (confirmation.querySelector('.toast-delete') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(deleteCustomer).toHaveBeenCalledWith(1);
+    expect(app.pendingDeletion).toBeNull();
   });
 
   it('should show duplicate-email feedback and keep the customer edit form open', async () => {

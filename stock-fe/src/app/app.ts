@@ -5,6 +5,10 @@ import { firstValueFrom } from 'rxjs';
 import { Customer, CustomerRequest, Order, OrderRequest, OrderStatus } from './order.models';
 import { OrderService } from './order.service';
 
+type PendingDeletion =
+  | { kind: 'order'; order: Order }
+  | { kind: 'customer'; customer: Customer };
+
 @Component({
   imports: [FormsModule, DatePipe, CurrencyPipe],
   selector: 'app-root',
@@ -29,13 +33,13 @@ export class App implements OnInit {
   savingOrder = false;
   savingCustomer = false;
   errorMessage = '';
+  orderSaveToast = '';
   successMessage = '';
   orderDialogOpen = false;
   customerDialogOpen = false;
   customerFormOpen = false;
-  customerDeleteDialogOpen = false;
-  deletingCustomer = false;
-  customerPendingDelete: Customer | null = null;
+  pendingDeletion: PendingDeletion | null = null;
+  deletingRecord = false;
   openOrderActionsId: number | null = null;
   readOnlyOrder = false;
   orderCustomerName = '';
@@ -76,11 +80,12 @@ export class App implements OnInit {
   }
 
   get ordersBlockingCustomerDelete(): Order[] {
-    if (!this.customerPendingDelete) {
+    const deletion = this.pendingDeletion;
+    if (!deletion || deletion.kind !== 'customer') {
       return [];
     }
     return this.orders.filter((order) =>
-      order.customerId === this.customerPendingDelete?.id && order.status !== 'Completed',
+      order.customerId === deletion.customer.id && order.status !== 'Completed',
     );
   }
 
@@ -162,6 +167,8 @@ export class App implements OnInit {
 
   closeOrderDialog(): void {
     this.orderDialogOpen = false;
+    this.errorMessage = '';
+    this.orderSaveToast = '';
   }
 
   addLineItem(): void {
@@ -208,12 +215,21 @@ export class App implements OnInit {
         this.successMessage = 'Order updated.';
       }
       this.closeOrderDialog();
-      await this.loadData();
+      this.changeDetector.markForCheck();
+      void this.loadData();
     } catch (error) {
-      this.errorMessage = this.errorText(error, 'Could not save the order.');
+      this.orderSaveToast =
+        `${this.errorText(error, 'Could not save the order.')} Please review or edit the order and try again.`;
+      this.changeDetector.markForCheck();
     } finally {
       this.savingOrder = false;
+      this.changeDetector.markForCheck();
     }
+  }
+
+  dismissOrderSaveToast(): void {
+    this.orderSaveToast = '';
+    this.changeDetector.markForCheck();
   }
 
   async changeStatus(order: Order, status: OrderStatus): Promise<void> {
@@ -250,17 +266,8 @@ export class App implements OnInit {
 
   async deleteOrder(order: Order): Promise<void> {
     this.openOrderActionsId = null;
-    if (!confirm(`Delete order #${order.id}? This cannot be undone.`)) {
-      return;
-    }
     this.clearNotices();
-    try {
-      await firstValueFrom(this.orderService.deleteOrder(order.id));
-      this.successMessage = `Order #${order.id} deleted.`;
-      await this.loadData();
-    } catch (error) {
-      this.errorMessage = this.errorText(error, 'Could not delete the order.');
-    }
+    this.pendingDeletion = { kind: 'order', order };
   }
 
   openCustomers(): void {
@@ -314,35 +321,38 @@ export class App implements OnInit {
 
   async deleteCustomer(customer: Customer): Promise<void> {
     this.clearNotices();
-    this.customerPendingDelete = customer;
-    this.customerDeleteDialogOpen = true;
+    this.pendingDeletion = { kind: 'customer', customer };
   }
 
-  closeCustomerDeleteDialog(): void {
-    if (this.deletingCustomer) {
+  cancelDeletion(): void {
+    if (this.deletingRecord) {
       return;
     }
-    this.customerDeleteDialogOpen = false;
-    this.customerPendingDelete = null;
+    this.pendingDeletion = null;
   }
 
-  async confirmDeleteCustomer(): Promise<void> {
-    const customer = this.customerPendingDelete;
-    if (!customer || this.deletingCustomer || this.ordersBlockingCustomerDelete.length > 0) {
+  async confirmDeletion(): Promise<void> {
+    const deletion = this.pendingDeletion;
+    if (!deletion || this.deletingRecord ||
+      (deletion.kind === 'customer' && this.ordersBlockingCustomerDelete.length > 0)) {
       return;
     }
     this.clearNotices();
-    this.deletingCustomer = true;
+    this.deletingRecord = true;
     try {
-      await firstValueFrom(this.orderService.deleteCustomer(customer.id));
-      this.successMessage = `${customer.name} deleted.`;
-      this.customerDeleteDialogOpen = false;
-      this.customerPendingDelete = null;
+      if (deletion.kind === 'order') {
+        await firstValueFrom(this.orderService.deleteOrder(deletion.order.id));
+        this.successMessage = `Order #${deletion.order.id} deleted.`;
+      } else {
+        await firstValueFrom(this.orderService.deleteCustomer(deletion.customer.id));
+        this.successMessage = `${deletion.customer.name} deleted.`;
+      }
+      this.pendingDeletion = null;
       await this.loadData();
     } catch (error) {
-      this.errorMessage = this.errorText(error, 'Could not delete the customer.');
+      this.errorMessage = this.errorText(error, 'Could not delete the selected record.');
     } finally {
-      this.deletingCustomer = false;
+      this.deletingRecord = false;
     }
   }
 
@@ -388,6 +398,7 @@ export class App implements OnInit {
 
   private clearNotices(): void {
     this.errorMessage = '';
+    this.orderSaveToast = '';
     this.successMessage = '';
   }
 
