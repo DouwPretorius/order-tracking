@@ -1,4 +1,4 @@
-# Orderdesk
+# Order tracker
 
 Orderdesk is a shared order-intake workspace. The Angular app provides customer and order CRUD, line items, status tracking, search, and status filters. The .NET API stores the records in PostgreSQL. This first version has no sign-in; all visitors use the same queue.
 
