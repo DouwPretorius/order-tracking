@@ -18,7 +18,7 @@ public sealed class OrderApiTests(OrderApiFactory factory) : IClassFixture<Order
         {
             name = "  Customer CRUD Test  ",
             email = "crud@example.com",
-            phone = "021 555 0100",
+            phone = "021-555-0100",
         });
 
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
@@ -47,6 +47,22 @@ public sealed class OrderApiTests(OrderApiFactory factory) : IClassFixture<Order
         var afterDelete = await client.GetFromJsonAsync<List<CustomerResponse>>("/api/customers", JsonOptions);
         Assert.NotNull(afterDelete);
         Assert.DoesNotContain(afterDelete, customer => customer.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Customer_creation_rejects_phone_characters_other_than_numbers_and_hyphens()
+    {
+        var response = await client.PostAsJsonAsync("/api/customers", new
+        {
+            name = "Invalid Phone Customer",
+            email = (string?)null,
+            phone = "021 555 ABC",
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>(JsonOptions);
+        Assert.NotNull(error);
+        Assert.Equal("Phone can contain numbers and hyphens only.", error.Message);
     }
 
     [Fact]

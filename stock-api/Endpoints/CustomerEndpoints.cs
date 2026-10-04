@@ -147,6 +147,11 @@ public static class CustomerEndpoints
         {
             return "Phone must be 40 characters or fewer.";
         }
+        if (!string.IsNullOrWhiteSpace(request.Phone) &&
+            request.Phone.Any(character => !char.IsAsciiDigit(character) && character != '-'))
+        {
+            return "Phone can contain numbers and hyphens only.";
+        }
         if (email is not null && !new EmailAddressAttribute().IsValid(email))
         {
             return "Enter a valid email address.";

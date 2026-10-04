@@ -34,6 +34,7 @@ export class App implements OnInit {
   savingCustomer = false;
   errorMessage = '';
   orderSaveToast = '';
+  customerSaveToast = '';
   successMessage = '';
   orderDialogOpen = false;
   customerDialogOpen = false;
@@ -280,6 +281,7 @@ export class App implements OnInit {
   closeCustomerDialog(): void {
     this.customerDialogOpen = false;
     this.customerFormOpen = false;
+    this.customerSaveToast = '';
   }
 
   startNewCustomer(): void {
@@ -301,6 +303,14 @@ export class App implements OnInit {
 
   async saveCustomer(): Promise<void> {
     this.clearNotices();
+    if (this.customerDraft.phone &&
+      [...this.customerDraft.phone].some((character) => !/[0-9-]/.test(character))) {
+      this.customerSaveToast =
+        'Phone can contain numbers and hyphens only. Please review or edit the customer and try again.';
+      this.changeDetector.markForCheck();
+      return;
+    }
+
     this.savingCustomer = true;
     try {
       if (this.editingCustomerId === null) {
@@ -313,10 +323,18 @@ export class App implements OnInit {
       this.cancelCustomerEdit();
       await this.loadData();
     } catch (error) {
-      this.errorMessage = this.errorText(error, 'Could not save the customer.');
+      this.customerSaveToast =
+        `${this.errorText(error, 'Could not save the customer.')} Please review or edit the customer and try again.`;
+      this.changeDetector.markForCheck();
     } finally {
       this.savingCustomer = false;
+      this.changeDetector.markForCheck();
     }
+  }
+
+  dismissCustomerSaveToast(): void {
+    this.customerSaveToast = '';
+    this.changeDetector.markForCheck();
   }
 
   async deleteCustomer(customer: Customer): Promise<void> {
@@ -399,6 +417,7 @@ export class App implements OnInit {
   private clearNotices(): void {
     this.errorMessage = '';
     this.orderSaveToast = '';
+    this.customerSaveToast = '';
     this.successMessage = '';
   }
 

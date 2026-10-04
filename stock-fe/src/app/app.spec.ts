@@ -226,6 +226,7 @@ describe('App', () => {
 
   it('should offer only valid next statuses and keep terminal statuses locked', () => {
     const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
     const app = fixture.componentInstance;
 
     expect(app.availableStatusOptions('Pending')).toEqual(['Pending', 'Processing', 'Cancelled']);
@@ -233,6 +234,33 @@ describe('App', () => {
     expect(app.availableStatusOptions('Confirmed')).toEqual(['Confirmed', 'Completed', 'Cancelled']);
     expect(app.availableStatusOptions('Completed')).toEqual(['Completed']);
     expect(app.availableStatusOptions('Cancelled')).toEqual(['Cancelled']);
+  });
+
+  it('should render terminal order statuses as non-interactive pills without dropdowns', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    await app.loadData();
+    app.orders = [
+      { ...app.orders[0], id: 21, status: 'Completed' },
+      { ...app.orders[0], id: 22, status: 'Cancelled' },
+      { ...app.orders[0], id: 23, status: 'Pending' },
+    ];
+    fixture.detectChanges();
+
+    const completedRow = [...fixture.nativeElement.querySelectorAll('tbody tr')]
+      .find((row) => row.textContent?.includes('#21')) as HTMLElement;
+    const cancelledRow = [...fixture.nativeElement.querySelectorAll('tbody tr')]
+      .find((row) => row.textContent?.includes('#22')) as HTMLElement;
+    const pendingRow = [...fixture.nativeElement.querySelectorAll('tbody tr')]
+      .find((row) => row.textContent?.includes('#23')) as HTMLElement;
+
+    expect(completedRow.querySelector('select.status-select')).toBeNull();
+    expect(completedRow.querySelector('.status-pill')?.textContent).toContain('Completed');
+    expect(cancelledRow.querySelector('select.status-select')).toBeNull();
+    expect(cancelledRow.querySelector('.status-pill')?.textContent).toContain('Cancelled');
+    expect(pendingRow.querySelector('select.status-select')).not.toBeNull();
   });
 
   it('should show blocking orders in the delete toast and prevent customer deletion', async () => {
@@ -326,10 +354,11 @@ describe('App', () => {
     expect(app.pendingDeletion).toBeNull();
   });
 
-  it('should show duplicate-email feedback and keep the customer edit form open', async () => {
+  it('should immediately show duplicate-email toast and keep the customer edit form open', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const app = fixture.componentInstance;
+    fixture.detectChanges();
     await app.loadData();
     app.openCustomers();
     app.editCustomer(app.customers[0]);
@@ -340,10 +369,58 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(app.customerDialogOpen).toBe(true);
-    const dialog = fixture.nativeElement.querySelector('.customer-modal') as HTMLElement;
-    expect(dialog.querySelector('[role="alert"]')?.textContent)
+    expect(app.savingCustomer).toBe(false);
+    const toast = fixture.nativeElement.querySelector('.toast-overlay [role="alertdialog"]') as HTMLElement;
+    expect(toast.textContent)
       .toContain('A customer with this email address already exists.');
-    expect(dialog.querySelector('form.customer-form')).not.toBeNull();
+    expect(toast.textContent).toContain('Please review or edit the customer and try again.');
+    expect(fixture.nativeElement.querySelector('.customer-modal form.customer-form')).not.toBeNull();
     expect(app.editingCustomerId).toBe(app.customers[0].id);
+
+    (toast.querySelector('button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(app.customerSaveToast).toBe('');
+    expect(fixture.nativeElement.querySelector('.toast-overlay')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.customer-modal form.customer-form')).not.toBeNull();
+  });
+
+  it('should show customer-creation errors immediately and allow retry after dismissal', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const app = fixture.componentInstance;
+    const orderService = TestBed.inject(OrderService);
+    orderService.createCustomer = () => throwError(() => ({
+      status: 500,
+      error: { message: 'Could not save customer right now.' },
+    }));
+
+    app.openCustomers();
+    app.startNewCustomer();
+    app.customerDraft = { name: 'New customer', email: '', phone: '' };
+    await app.saveCustomer();
+    fixture.detectChanges();
+
+    expect(app.customerDialogOpen).toBe(true);
+    expect(app.customerFormOpen).toBe(true);
+    expect(fixture.nativeElement.querySelector('.toast-overlay [role="alertdialog"]')?.textContent)
+      .toContain('Could not save customer right now.');
+    expect(fixture.nativeElement.querySelector('.customer-modal form.customer-form')).not.toBeNull();
+  });
+
+  it('should reject customer phone values containing characters other than numbers and hyphens', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const app = fixture.componentInstance;
+    const orderService = TestBed.inject(OrderService);
+    const createCustomer = vi.fn();
+    orderService.createCustomer = createCustomer;
+    app.customerDraft = { name: 'New customer', email: '', phone: '021 555 0100' };
+
+    await app.saveCustomer();
+
+    expect(createCustomer).not.toHaveBeenCalled();
+    expect(app.savingCustomer).toBe(false);
+    expect(app.customerSaveToast).toContain('Phone can contain numbers and hyphens only.');
   });
 });

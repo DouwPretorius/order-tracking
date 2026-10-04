@@ -109,7 +109,7 @@
                 <th>CUSTOMER</th>
                 <th>ITEMS</th>
                 <th>ORDER DATE</th>
-                <th>STATUS</th>
+                <th class="status-column">STATUS</th>
                 <th class="amount-column">TOTAL</th>
                 <th><span class="visually-hidden">Actions</span></th>
               </tr>
@@ -129,12 +129,16 @@
                     <small class="item-preview">{{ itemSummary(order) }}</small>
                   </td>
                   <td>{{ order.createdAt | date:'MMM d, y' }}</td>
-                  <td>
-                    <select class="status-select" [class]="statusClass(order.status)" [ngModel]="order.status" (ngModelChange)="changeStatus(order, $event)" [disabled]="order.customerId === null || availableStatusOptions(order.status).length === 1" [attr.aria-label]="'Status for order ' + order.id">
-                      @for (status of availableStatusOptions(order.status); track status) {
-                        <option [ngValue]="status">{{ status }}</option>
-                      }
-                    </select>
+                  <td class="status-column">
+                    @if (order.status === 'Completed' || order.status === 'Cancelled') {
+                      <span class="status-pill" [class]="'status-pill status-' + order.status.toLowerCase()" [attr.aria-label]="'Status for order ' + order.id">{{ order.status }}</span>
+                    } @else {
+                      <select class="status-select" [class]="statusClass(order.status)" [ngModel]="order.status" (ngModelChange)="changeStatus(order, $event)" [disabled]="order.customerId === null" [attr.aria-label]="'Status for order ' + order.id">
+                        @for (status of availableStatusOptions(order.status); track status) {
+                          <option [ngValue]="status">{{ status }}</option>
+                        }
+                      </select>
+                    }
                   </td>
                   <td class="amount-column total">{{ order.total | currency:'ZAR':'symbol':'1.2-2':'en-ZA' }}</td>
                   <td class="actions-cell">
@@ -272,6 +276,15 @@
   </div>
 }
 
+@if (customerSaveToast) {
+  <div class="toast-overlay">
+    <section class="toast toast-error" role="alertdialog" aria-modal="true" aria-label="Customer save failed">
+      <span>{{ customerSaveToast }}</span>
+      <button type="button" (click)="dismissCustomerSaveToast()">Dismiss to edit customer</button>
+    </section>
+  </div>
+}
+
 @if (customerDialogOpen) {
   <div class="modal-backdrop" (click)="closeCustomerDialog()">
     <section class="modal customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title" (click)="$event.stopPropagation()">
@@ -288,7 +301,8 @@
             <label class="field"><span>Name <em>*</em></span><input name="customerName" [(ngModel)]="customerDraft.name" required maxlength="120" placeholder="Customer or company name"></label>
             <div class="field-pair">
               <label class="field"><span>Email</span><input name="customerEmail" [(ngModel)]="customerDraft.email" type="email" maxlength="254" placeholder="name@example.com"></label>
-              <label class="field"><span>Phone</span><input name="customerPhone" [(ngModel)]="customerDraft.phone" maxlength="40" placeholder="(555) 000-0000"></label>
+              <label class="field"><span>Phone</span><input name="customerPhone" [(ngModel)]="customerDraft.phone" maxlength="40" inputmode="tel" placeholder="021-555-0100" aria-describedby="customer-phone-hint"></label>
+              <small id="customer-phone-hint" class="field-hint">Use numbers and hyphens only.</small>
             </div>
             <div class="form-actions">
               <button class="button button-secondary" type="button" (click)="cancelCustomerEdit()">Cancel</button>
