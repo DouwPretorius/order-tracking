@@ -1,0 +1,325 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="GOAT Boardgames home">
+      <span class="brand-mark">G</span>
+      <span>GOAT Boardgames</span>
+    </a>
+
+    <div class="side-label">WORKSPACE</div>
+    <button class="nav-item active" type="button">
+      <span class="nav-icon">▦</span>
+      <span>Orders</span>
+      <span class="nav-count">{{ activeOrders.length }}</span>
+    </button>
+    <button class="nav-item" type="button" (click)="openCustomers()">
+      <span class="nav-icon">♙</span>
+      <span>Customers</span>
+    </button>
+
+    <div class="sidebar-bottom">
+      <div class="avatar">OD</div>
+      <div class="profile-copy">
+        <strong>Order desk</strong>
+        <span>Shared workspace</span>
+      </div>
+      <span class="more">···</span>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="breadcrumbs"><span>Workspace</span><span class="crumb-divider">/</span><strong>Orders</strong></div>
+      <div class="topbar-right">
+        <span class="today">{{ today | date:'EEEE, MMM d' }}</span>
+        <button class="avatar small-avatar" type="button" aria-label="Shared workspace">GB</button>
+      </div>
+    </header>
+
+    <section class="page-content">
+      <div class="page-heading">
+        <div>
+          <div class="eyebrow">OVERVIEW</div>
+          <h1>Orders</h1>
+          <p class="subtitle">Keep every customer order moving.</p>
+        </div>
+        <div class="heading-actions">
+          <button class="button button-secondary" type="button" (click)="openCustomers()">Manage customers</button>
+          <button class="button button-primary" type="button" (click)="openNewOrder()">
+            <span class="plus">+</span> New order
+          </button>
+        </div>
+      </div>
+
+      @if (errorMessage) {
+        <div class="notice notice-error" role="alert">
+          <span>{{ errorMessage }}</span>
+          <button type="button" (click)="loadData()">Try again</button>
+        </div>
+      }
+      @if (successMessage) {
+        <div class="notice notice-success" role="status">{{ successMessage }}</div>
+      }
+
+      <section class="stats-grid" aria-label="Order summary">
+        <article class="stat-card">
+          <div class="stat-top"><span>Needs processing</span><span class="stat-icon orange">↗</span></div>
+          <strong>{{ activeOrders.length }}</strong>
+          <span class="stat-caption">Pending, processing and confirmed</span>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Pending</span><span class="stat-icon blue">◷</span></div>
+          <strong>{{ countByStatus('Pending') }}</strong>
+          <span class="stat-caption">Waiting to be started</span>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Processing</span><span class="stat-icon purple">⟳</span></div>
+          <strong>{{ countByStatus('Processing') }}</strong>
+          <span class="stat-caption">Currently in progress</span>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Confirmed</span><span class="stat-icon blue">✓</span></div>
+          <strong>{{ countByStatus('Confirmed') }}</strong>
+          <span class="stat-caption">Ready to be completed</span>
+        </article>
+        <article class="stat-card">
+          <div class="stat-top"><span>Completed</span><span class="stat-icon green">✓</span></div>
+          <strong>{{ countByStatus('Completed') }}</strong>
+          <span class="stat-caption">Orders fulfilled</span>
+        </article>
+      </section>
+
+      <section class="orders-panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Order queue</h2>
+            <p>{{ filteredOrders.length }} {{ filteredOrders.length === 1 ? 'order' : 'orders' }} in view</p>
+          </div>
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input type="search" placeholder="Search orders..." [(ngModel)]="searchTerm" aria-label="Search orders">
+          </label>
+        </div>
+
+        <div class="filter-row" role="group" aria-label="Filter orders by status">
+          @for (filter of statusFilters; track filter) {
+            <button
+              class="filter-chip"
+              [class.selected]="selectedFilter === filter"
+              type="button"
+              (click)="selectedFilter = filter"
+            >{{ filter }}<span>{{ filter === 'All orders' ? orders.length : countByStatus(filter) }}</span></button>
+          }
+        </div>
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>ORDER</th>
+                <th>CUSTOMER</th>
+                <th>ITEMS</th>
+                <th>ORDER DATE</th>
+                <th>STATUS</th>
+                <th class="amount-column">TOTAL</th>
+                <th><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (order of filteredOrders; track order.id) {
+                <tr>
+                  <td><button class="order-link" type="button" (click)="viewOrder(order)">#{{ order.id }}</button></td>
+                  <td>
+                    <div class="customer-cell">
+                      <span class="customer-avatar" [class]="avatarClass(order.customerName)">{{ initials(order.customerName) }}</span>
+                      <span><strong>{{ order.customerName }}</strong><small>{{ customerEmail(order.customerId) }}</small></span>
+                    </div>
+                  </td>
+                  <td>
+                    <strong>{{ order.items.length }} {{ order.items.length === 1 ? 'item' : 'items' }}</strong>
+                    <small class="item-preview">{{ itemSummary(order) }}</small>
+                  </td>
+                  <td>{{ order.createdAt | date:'MMM d, y' }}</td>
+                  <td>
+                    <select class="status-select" [class]="statusClass(order.status)" [ngModel]="order.status" (ngModelChange)="changeStatus(order, $event)" [disabled]="order.customerId === null || availableStatusOptions(order.status).length === 1" [attr.aria-label]="'Status for order ' + order.id">
+                      @for (status of availableStatusOptions(order.status); track status) {
+                        <option [ngValue]="status">{{ status }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td class="amount-column total">{{ order.total | currency:'ZAR':'symbol':'1.2-2':'en-ZA' }}</td>
+                  <td class="actions-cell">
+                    <button class="icon-button" type="button" [attr.aria-label]="'More actions for order ' + order.id" [attr.aria-expanded]="openOrderActionsId === order.id" (click)="toggleOrderActions(order.id)">···</button>
+                    <div class="row-actions" [class.open]="openOrderActionsId === order.id">
+                      <button type="button" (click)="editOrder(order)">Edit</button>
+                      <button class="delete-action" type="button" (click)="deleteOrder(order)">Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan="7">
+                    <div class="empty-state">
+                      @if (loading) {
+                        <strong>Loading orders...</strong>
+                        <span>Connecting to the order service.</span>
+                      } @else {
+                        <strong>{{ searchTerm || selectedFilter !== 'All orders' ? 'No matching orders' : 'No orders yet' }}</strong>
+                        <span>{{ searchTerm || selectedFilter !== 'All orders' ? 'Try changing your search or filter.' : 'Create an order to get your queue started.' }}</span>
+                        @if (!searchTerm && selectedFilter === 'All orders') {
+                          <button class="button button-primary" type="button" (click)="openNewOrder()">Create first order</button>
+                        }
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <footer class="panel-footer"><span>Showing {{ filteredOrders.length }} of {{ orders.length }} orders</span><span>Updated just now</span></footer>
+      </section>
+    </section>
+  </main>
+</div>
+
+@if (orderDialogOpen) {
+  <div class="modal-backdrop" (click)="closeOrderDialog()">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="order-dialog-title" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div><div class="eyebrow">{{ editingOrderId ? 'ORDER #' + editingOrderId : 'NEW ENTRY' }}</div><h2 id="order-dialog-title">{{ readOnlyOrder ? 'Order details' : editingOrderId ? 'Edit order' : 'Create an order' }}</h2></div>
+        <button class="close-button" type="button" aria-label="Close" (click)="closeOrderDialog()">×</button>
+      </header>
+      @if (errorMessage) { <div class="notice notice-error modal-notice" role="alert">{{ errorMessage }}</div> }
+      <form (ngSubmit)="saveOrder()" [class.read-only-order]="readOnlyOrder">
+        <div class="modal-body">
+          <label class="field">
+            <span>Customer</span>
+            @if (readOnlyOrder) {
+              <input [value]="orderCustomerName" readonly aria-label="Customer">
+            } @else {
+              <select name="customerId" required [(ngModel)]="orderDraft.customerId">
+                <option [ngValue]="0" disabled>Select a customer</option>
+                @for (customer of customers; track customer.id) {
+                  <option [ngValue]="customer.id">{{ customer.name }}</option>
+                }
+              </select>
+            }
+          </label>
+          @if (editingOrderId) {
+            <label class="field">
+              <span>Status</span>
+              <select name="status" [(ngModel)]="orderDraft.status" [disabled]="readOnlyOrder || editingStatusOptions.length === 1">
+                @for (status of editingStatusOptions; track status) { <option [ngValue]="status">{{ status }}</option> }
+              </select>
+            </label>
+          }
+          <div class="line-items-heading"><div><h3>Line items</h3><p>{{ readOnlyOrder ? 'Products on this order.' : 'Add board games or collectible card game products.' }}</p></div>@if (!readOnlyOrder) { <button class="button button-secondary button-compact" type="button" (click)="addLineItem()">+ Add item</button> }</div>
+          <div class="line-items-scroll">
+            <div class="line-item-labels"><span>ITEM NAME</span><span>SKU</span><span>QTY</span><span>PRICE</span><span>LINE TOTAL</span><span></span></div>
+            @for (item of orderDraft.items; track $index; let i = $index) {
+              <div class="line-item-fields">
+                <input [name]="'item-name-' + i" [(ngModel)]="item.name" placeholder="e.g. Catan: Seafarers" required maxlength="160" aria-label="Item name" [readonly]="readOnlyOrder">
+                <input [name]="'item-sku-' + i" [(ngModel)]="item.sku" placeholder="e.g. BG-1042" maxlength="64" aria-label="SKU" [readonly]="readOnlyOrder">
+                <input [name]="'item-quantity-' + i" [(ngModel)]="item.quantity" type="number" min="1" max="2147483647" step="1" required aria-label="Quantity" [readonly]="readOnlyOrder">
+                <div class="price-input"><span>R</span><input [name]="'item-price-' + i" [(ngModel)]="item.unitPrice" type="number" min="0" step="0.01" required aria-label="Unit price in South African rand" [readonly]="readOnlyOrder"></div>
+                <output class="line-total-value" [attr.aria-label]="'Line total ' + (item.quantity * item.unitPrice | currency:'ZAR':'symbol':'1.2-2':'en-ZA')">{{ (item.quantity * item.unitPrice) | currency:'ZAR':'symbol':'1.2-2':'en-ZA' }}</output>
+                @if (!readOnlyOrder) { <button class="remove-item" type="button" [disabled]="orderDraft.items.length === 1" [attr.aria-label]="'Remove item ' + (i + 1)" (click)="removeLineItem(i)">×</button> }
+              </div>
+            }
+          </div>
+          <div class="order-total"><span>Order total</span><strong>{{ draftTotal | currency:'ZAR':'symbol':'1.2-2':'en-ZA' }}</strong></div>
+        </div>
+        <footer class="modal-footer">
+          @if (readOnlyOrder) {
+            <button class="button button-secondary" type="button" (click)="closeOrderDialog()">Close</button>
+          } @else {
+            <button class="button button-secondary" type="button" (click)="closeOrderDialog()">Cancel</button>
+            <button class="button button-primary" type="submit" [disabled]="savingOrder || customers.length === 0">{{ savingOrder ? 'Saving...' : editingOrderId ? 'Save changes' : 'Create order' }}</button>
+          }
+        </footer>
+      </form>
+      @if (customers.length === 0 && !readOnlyOrder) { <div class="inline-hint">Add a customer before creating an order. <button type="button" (click)="openCustomers()">Manage customers</button></div> }
+    </section>
+  </div>
+}
+
+@if (customerDialogOpen) {
+  <div class="modal-backdrop" (click)="closeCustomerDialog()">
+    <section class="modal customer-modal" role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div><div class="eyebrow">YOUR CONTACTS</div><h2 id="customer-dialog-title">Customers</h2></div>
+        <button class="close-button" type="button" aria-label="Close" (click)="closeCustomerDialog()">×</button>
+      </header>
+      <div class="modal-body customer-manager">
+        @if (errorMessage) { <div class="notice notice-error" role="alert">{{ errorMessage }}</div> }
+        @if (successMessage) { <div class="notice notice-success" role="status">{{ successMessage }}</div> }
+        @if (customerFormOpen) {
+          <form class="customer-form" (ngSubmit)="saveCustomer()">
+            <h3>{{ editingCustomerId ? 'Edit customer' : 'Add a customer' }}</h3>
+            <label class="field"><span>Name <em>*</em></span><input name="customerName" [(ngModel)]="customerDraft.name" required maxlength="120" placeholder="Customer or company name"></label>
+            <div class="field-pair">
+              <label class="field"><span>Email</span><input name="customerEmail" [(ngModel)]="customerDraft.email" type="email" maxlength="254" placeholder="name@example.com"></label>
+              <label class="field"><span>Phone</span><input name="customerPhone" [(ngModel)]="customerDraft.phone" maxlength="40" placeholder="(555) 000-0000"></label>
+            </div>
+            <div class="form-actions">
+              <button class="button button-secondary" type="button" (click)="cancelCustomerEdit()">Cancel</button>
+              <button class="button button-primary" type="submit" [disabled]="savingCustomer">{{ savingCustomer ? 'Saving...' : editingCustomerId ? 'Save changes' : 'Add customer' }}</button>
+            </div>
+          </form>
+        } @else {
+          <button class="button button-secondary add-customer-button" type="button" (click)="startNewCustomer()">+ Add customer</button>
+        }
+        <div class="customer-list">
+          @for (customer of customers; track customer.id) {
+            <div class="customer-row">
+              <span class="customer-avatar" [class]="avatarClass(customer.name)">{{ initials(customer.name) }}</span>
+              <div class="customer-row-copy"><strong>{{ customer.name }}</strong><span>{{ customer.email || customer.phone || 'No contact details' }}</span></div>
+              <button class="text-action" type="button" (click)="editCustomer(customer)">Edit</button>
+              <button class="text-action delete-action" type="button" (click)="deleteCustomer(customer)">Delete</button>
+            </div>
+          } @empty {
+            <div class="customer-empty">No customers yet. Add one to start creating orders.</div>
+          }
+        </div>
+      </div>
+    </section>
+  </div>
+}
+
+@if (customerDeleteDialogOpen && customerPendingDelete) {
+  <div class="modal-backdrop delete-confirm-backdrop" (click)="closeCustomerDeleteDialog()">
+    <section class="modal delete-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="customer-delete-title" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <div><div class="eyebrow">CUSTOMER REMOVAL</div><h2 id="customer-delete-title">Delete {{ customerPendingDelete.name }}?</h2></div>
+        <button class="close-button" type="button" aria-label="Close" [disabled]="deletingCustomer" (click)="closeCustomerDeleteDialog()">×</button>
+      </header>
+      <div class="modal-body delete-confirm-body">
+        @if (errorMessage) { <div class="notice notice-error" role="alert">{{ errorMessage }}</div> }
+        @if (ordersBlockingCustomerDelete.length > 0) {
+          <div class="delete-blocked-message" role="status">
+            <strong>This customer can’t be deleted yet.</strong>
+            <span>Complete or remove these orders first:</span>
+          </div>
+          <ul class="blocking-order-list">
+            @for (order of ordersBlockingCustomerDelete; track order.id) {
+              <li>
+                <div class="blocking-order-main">
+                  <strong>Order #{{ order.id }}</strong>
+                  <span class="status-select" [class]="statusClass(order.status)">{{ order.status }}</span>
+                </div>
+                <div class="blocking-order-detail">{{ order.items.length }} {{ order.items.length === 1 ? 'item' : 'items' }} · {{ itemSummary(order) }}</div>
+                <div class="blocking-order-total">{{ order.total | currency:'ZAR':'symbol':'1.2-2':'en-ZA' }}</div>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p>Are you sure you want to delete this customer? Their completed orders will be kept with the customer name saved, but contact details will be removed.</p>
+        }
+      </div>
+      <footer class="modal-footer">
+        <button class="button button-secondary" type="button" [disabled]="deletingCustomer" (click)="closeCustomerDeleteDialog()">Cancel</button>
+        <button class="button button-danger" type="button" [disabled]="deletingCustomer || ordersBlockingCustomerDelete.length > 0" (click)="confirmDeleteCustomer()">{{ deletingCustomer ? 'Deleting...' : 'Delete customer' }}</button>
+      </footer>
+    </section>
+  </div>
+}
